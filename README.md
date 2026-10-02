@@ -80,7 +80,7 @@ Một lượt tương tác mặc định 30–60–60:
    hỏi để giữ tên tự động/bỏ ghi chú. Gõ `next` để mở lượt MONITOR mới trong cùng phiên;
    cảm biến không bị khởi tạo lại. Gõ `quit` để kết thúc phiên.
 
-Nhập lệnh không chặn vòng đọc/lưu. Khi chờ tên/ghi chú hoặc giữa lượt, session log
+Terminal tương tác dùng `prompt-toolkit` (`PromptSession` và `patch_stdout`): một bộ dựng màn hình giữ dòng đang gõ, hỗ trợ Backspace và Unicode, đưa trạng thái lên phía trên prompt. Dependency đã nằm trong `requirements-lock.txt`; `pyte` dùng cho kiểm thử màn hình PTY. Nhập lệnh không chặn vòng đọc/lưu. Khi chờ tên/ghi chú hoặc giữa lượt, session log
 vẫn thu ở WAIT_NAME/WAIT_NOTES/BETWEEN_RUNS. Phân tích chạy ở worker riêng.
 Pha có timer kết thúc ở deadline monotonic; worker gắn nhãn WAIT ngay từ deadline,
 kể cả khi giao diện in thông báo trễ. Thời điểm đưa/bỏ mẫu vẫn do bạn thao tác và
@@ -138,7 +138,7 @@ Monitor thật, bơm disabled — **bạn tự chạy**, sau khi xác nhận ngu
 .venv/bin/python -m robonose monitor --hardware --pump-disabled --config config.example.toml
 ```
 
-`monitor` ghi liên tục đến `quit`/Ctrl+C; có thể thêm `--duration 60`.
+`monitor` ghi liên tục đến `quit`/Ctrl+C hoặc EOF (Ctrl+D khi dòng trống); có thể thêm `--duration 60` để giới hạn theo dõi trước khi bắt đầu lượt. Gõ `start` ngay trong MONITOR để chuyển sang BASELINE và thu 30–60–60, giữ nguyên reader và heater đang chạy. Giới hạn monitor không cắt lượt đã bắt đầu. Chương trình yêu cầu reader/vòng thu hoạt động; hiện không có ngưỡng warmup tự động, bạn tự quyết định thời điểm đủ warmup. Nếu vòng thu chưa sẵn sàng, thông báo nêu rõ điều kiện còn thiếu.
 Không coi số đọc hợp lệ là bằng chứng wiring/hiệu chuẩn hoàn chỉnh. Đối chiếu
 đơn vị, cờ chất lượng, các kênh, điện áp và timestamps trong raw.
 
@@ -151,18 +151,69 @@ Thu thật 30–60–60, thao tác terminal giống mô phỏng:
   --purge-method "cách xả buồng" --lid-state "trạng thái nắp"
 ```
 
-Chưa có GPIO/cực tính đã xác nhận nên chưa có lệnh enable bơm sẵn để chạy.
-Chỉ sau khi xác nhận dây BCM, mức HIGH/LOW bật, MOSFET tương thích logic,
-nguồn 12V, mass và mạch bảo vệ, điền `[pump] enabled=true, confirmed=true,
-gpio_bcm=<chân thực tế>, active_high=<cực tính thực tế>`. Có thể chọn
-`--enable-pump` sau khi đã điền các trường còn lại. Không dùng số GPIO ví dụ.
-Sim luôn disabled, và pump-disabled không khởi tạo GPIO của bơm. Trạng thái vật lý
-bơm còn phụ thuộc mạch ngoài; dữ liệu chỉ lưu lệnh ON/OFF/DISABLED/UNKNOWN.
+JZ-MOS: TRIG/PWM nối BCM17 (chân vật lý 11); GND điều khiển nối GND Pi,
+nguồn bơm 12 V riêng. v1.0 chỉ bật/tắt, không PWM. Cực tính TRIG chưa được xác nhận:
+template giữ enabled=false, confirmed=false và không có active_high.
+Bơm mặc định OFF khi được enable, OFF khi kết thúc lượt/abort/thoát có xử lý.
+Sim và --pump-disabled không mở GPIO. pump_command là lệnh đã gửi, trạng thái vật lý
+và lưu lượng **chưa đo được**. Code không bảo đảm OFF khi Pi chưa khởi động,
+mất điện hoặc bị kill cưỡng bức; phải kiểm tra chân/module trên hardware.
+
+Tạo cấu hình riêng, không ghi đè file có sẵn, rồi khai báo cực tính sau khi đã xác nhận:
+
+```bash
+cp --no-clobber config.example.toml config.jz-mos.toml
+nano config.jz-mos.toml
+```
+
+Trong [pump], giữ gpio_bcm=17; đặt confirmed=true và thêm active_high=true nếu đã
+xác nhận HIGH bật, hoặc active_high=false nếu LOW bật. Giữ enabled=false để chỉ
+bật điều khiển qua --enable-pump. Nếu chưa xác nhận, giữ disabled và không chạy thử thật.
+
+Lệnh thử ngắn độc lập, không mở cảm biến:
+
+```bash
+.venv/bin/python -m robonose pump-test --sim --seconds 2
+# Bạn tự chạy sau kiểm tra nguồn/dây/cực tính:
+.venv/bin/python -m robonose pump-test --hardware --enable-pump \
+  --config config.jz-mos.toml --seconds 2
+```
+
+pump-test gửi OFF → ON 2 giây theo monotonic → OFF, cuối cùng cleanup OFF.
+Có giới hạn thử <=10 giây. Sim chỉ diễn tập trình tự, mọi pump_command=DISABLED.
+Log riêng kind=pump_test chứa raw/events/metadata/summary; không có phép đo
+cảm biến và không có đồ thị cảm biến. Lệnh thu có --enable-pump cho phép pump on/off
+thủ công trong terminal, giữ reader và ghi lệnh bơm trong CSV/events.
 
 Cần xác nhận điện áp cấp MQ/ADS, AO lớn nhất và chia áp ở A0/A1.
 Gain đo không thay thế giới hạn điện áp chân ADC. Khi chưa có hệ số chia áp,
 chỉ lưu điện áp tại ADS; trường AO để trống. Cần ghi thời gian warmup/hiệu chuẩn,
 thể tích buồng, hướng khí/vị trí bơm, lưu lượng nếu biết và cách xả thực tế.
+
+## Độ ổn định và chất lượng phép đo
+
+Trong MONITOR/BASELINE, dòng ổn định hiển thị xu hướng gas (%/phút), T (°C/phút),
+H (điểm %RH/phút) trên cửa sổ [stability]. Gas phải có status/fresh và các flag hợp lệ;
+T/H dùng status/fresh. Tiêu chí kết hợp slope hồi quy theo elapsed_s và range,
+số mẫu tối thiểu, độ phủ cửa sổ, tỷ lệ thiếu và gap/mẫu cũ. Không chỉ xét heater_stable.
+Mặc định cửa sổ 30 s, tối thiểu 5 mẫu và 80% độ phủ; đây là tiêu chí quan sát,
+**không phải thời gian warmup bắt buộc**. Chỉnh các ngưỡng trong config theo khảo sát.
+
+start luôn cho người dùng chủ động bắt đầu khi vòng thu hoạt động; đang trôi hoặc
+chưa đủ dữ liệu sẽ cảnh báo, ghi pre_baseline_quality và baseline_started_without_stability.
+Sau lượt, baseline_quality/baseline_unstable ghi chất lượng toàn BASELINE;
+summary có measurement_quality. stable/baseline_unstable=null khi chưa đánh giá đủ
+hoặc pha thiếu. Nhiệt độ vượt temperature_warning_c (mặc định 35°C) là cảnh báo
+riêng; không tự bù nhiệt hay kết luận nguồn nhiệt. Nền đang trôi khiến đáp ứng tương đối
+khó diễn giải; summary và cả hai PNG ghi cảnh báo. Các thống kê vẫn là thay đổi
+tín hiệu, không phải bằng chứng mùi/ppm/IAQ. Raw giữ nguyên.
+
+Ở hai kênh, khai báo divider_description đúng thực tế. Nếu đã xác nhận 10 kΩ/10 kΩ,
+mỗi kênh cần divider_factor=2.0 riêng và description “Đã xác nhận 10 kΩ/10 kΩ”.
+Khi chưa xác nhận, description nói rõ dự kiến, factor không đặt và AO để null.
+Metadata adc_inputs ghi vị trí đo ADS, kênh, mô tả chia áp và hệ số đã xác nhận.
+Giá trị voltage_v luôn là điện áp tại ADS cùng conversion với count; ao_voltage_v
+là ước lượng tính riêng, không phải phép đo AO độc lập.
 
 ## File và phân tích
 
@@ -227,7 +278,34 @@ WAIT_NOTES; có guard chặn import/mở thiết bị phần cứng. Nó tạo d
 report/console riêng trong `logs/`, không ghi đè lượt cũ. Kết quả rà soát nằm ở
 [docs/review.md](docs/review.md).
 
-Không có test phần cứng thật trong triển khai này: chưa xác nhận địa chỉ,
+Trong lượt hoàn thiện này chỉ test sim/mock; đã đọc lượt hardware COMPLETE do người dùng thu, không tự chạy hardware. Chưa xác nhận
 điện áp, calibration, heater thực tế, lưu lượng hoặc hoạt động MOSFET/bơm.
 Không tự commit/push. `.gitignore` loại `.venv`, `data`, `logs`, cache,
 binary build và secrets `.env`; sao lưu dữ liệu thu bằng cách riêng.
+
+## Checklist một lượt thử tích hợp
+
+1. Chạy doctor và monitor hardware với pump-disabled. Đối chiếu gas/T/H,
+   cờ chất lượng, điện áp ADS và xu hướng; ghi mark cho trạng thái nắp/nguồn bơm.
+   Nếu gas tiếp tục tăng hoặc T cao, ghi nhận chất lượng và khảo sát warmup/vị trí
+   cảm biến, không gọi đó là phản ứng mùi. Xác nhận nguồn MQ, ADS và chia áp thực tế.
+2. Xác nhận cực tính JZ-MOS, chân BCM17/physical11, GND và nguồn 12 V riêng.
+   Bạn tự cấp nguồn, kiểm tra OFF trước ứng dụng/khởi động Pi; chạy pump-test thật
+   OFF → ON 2 s → OFF. Đối chiếu bơm thực tế với events; chưa đạt thì không thu với bơm.
+3. Thu 30–60–60. Chọn thu bằng ống hoặc mở nắp, khai báo sampling_method/purge_method
+   và lid_state, đánh dấu thao tác thực tế bằng mark. Phân biệt MONITOR/warmup với
+   BASELINE, dùng expose/recover đúng lúc đưa/bỏ mẫu. Chỉ dùng pump on/off khi
+   đã enable rõ ràng; chương trình không tự chuyển đường khí.
+4. Sau RECOVERY chọn finish hoặc extend; đặt tên/ghi chú hoặc skip. Kiểm tra đủ file,
+   COMPLETE chỉ là hoàn thành pipeline, không xác nhận baseline ổn định hay buồng sạch.
+   analyze lại offline và xem measurement_quality/raw/% thay đổi. next cho lượt kế tiếp.
+
+```bash
+.venv/bin/python -m robonose collect --hardware --enable-pump \
+  --config config.jz-mos.toml --baseline 30 --exposure 60 --recovery 60 \
+  --sample-description "mẫu tự chọn" --sampling-method "bằng ống hoặc mở nắp" \
+  --purge-method "cách xả thực tế" --lid-state "trạng thái nắp"
+.venv/bin/python -m robonose analyze "data/exploration/YYYY-MM-DD/THU_MUC_LUOT"
+```
+
+Nếu chưa xác nhận bơm, thay --enable-pump bằng --pump-disabled; vẫn thu bằng thao tác tay.

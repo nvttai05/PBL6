@@ -109,13 +109,15 @@ def test_interactive_waits_extensions_names_and_multiple_runs(tmp_path):
         time.sleep(.1)
         app.send("abort")
         app.wait("Đặt tên:", count=2)
-        app.send("skip")
+        app.send("name ../../mẫu áo")
         app.send("skip")
         app.wait("next để thu lượt mới", count=2)
         app.send("quit")
         assert app.p.wait(timeout=40) == 0, app.text()
         runs = app.runs()
         assert len(runs) == 2
+        assert all(p.name.startswith("mẫu_áo_") for p,m in runs)
+        assert len({m["run_id"] for p,m in runs}) == 2
         completed = next((p,m) for p,m in runs if m["status"] == "COMPLETE")
         path, meta = completed
         assert path.name.startswith("mẫu_áo_")

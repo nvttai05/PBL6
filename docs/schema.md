@@ -116,3 +116,31 @@ Baseline chưa hoàn thành/không đủ mẫu giữ n quan sát được, các 
 với reason, cả ba tín hiệu chính và T/H/P. Session/monitor không tính đáp ứng theo
 nền để tránh trộn lượt; dùng summary của từng collect. NaN/Infinity từ driver được
 lưu null kèm lỗi, không coi là dữ liệu fresh/OK.
+
+
+## Chất lượng và chia áp (bổ sung v1.0)
+
+Raw không đổi schema/cột. Metadata mới:
+- adc_inputs: vị trí điện áp đo là ADS, channel, divider_description,
+  divider_factor_confirmed, ao_estimate_factor và quy tắc suy ra AO.
+  Description 10 kΩ/10 kΩ không tự xác nhận tỷ lệ; chỉ factor đã cấu hình
+  mới cho AO estimate. Count/voltage cùng conversion, SPS khác sample_hz.
+- pre_baseline_quality: cửa sổ gas/T/H ngay trước start, stable true/false/null,
+  lý do, advisory nhiệt độ cao, n/span/mean/slope/range/invalid_fraction và criteria.
+- baseline_started_without_stability: true nếu trước start chưa đạt/thiếu quan sát;
+  không phải trạng thái hoàn thành pipeline.
+- baseline_quality: đánh giá cả pha BASELINE; baseline_unstable true khi đang trôi,
+  false khi đủ tiêu chí, null khi không đủ mẫu/gap/pha thiếu. Nếu có trôi rõ và
+  đồng thời thiếu dữ liệu, stable=false và reasons vẫn liệt kê thiếu dữ liệu.
+
+Summary.measurement_quality giữ pre-baseline, đánh giá baseline tính lại từ raw,
+cờ baseline_unstable và lời giải thích giới hạn quy kết mùi. Phân tích dữ liệu cũ
+thiếu [stability] dùng ngưỡng mặc định hiện tại và lưu criteria vào summary; không
+sửa metadata/raw cũ. stable=false không xóa mẫu hay xóa thống kê số.
+Slope T: °C/phút; H: điểm %RH/phút; gas: Ω/phút và %/phút theo mean trong cửa sổ.
+Range là max−min, không sửa/làm mượt raw. Advisory T cao không tự bù nhiệt.
+
+Events baseline_quality_at_start lưu snapshot và command_received giữ raw lệnh.
+Pump ON/OFF/UNKNOWN/DISABLED chỉ là lệnh, không phải trạng thái vật lý đo được.
+pump-test có kind=pump_test, raw chỉ chứa thời gian/phase/lệnh bơm, các giá trị
+cảm biến null, events + metadata + summary audit; không có PNG cảm biến.

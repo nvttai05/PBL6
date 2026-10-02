@@ -5,6 +5,7 @@ import math
 import os
 from pathlib import Path
 from .writer import atomic_json
+from .quality import baseline_quality
 
 SIGNALS = {"gas_resistance_ohm": "bme", "mq135_voltage_v": "mq135", "mq3_voltage_v": "mq3"}
 ENV = {"temperature_c": "bme", "humidity_pct": "bme", "pressure_hpa": "bme"}
@@ -79,6 +80,16 @@ def analyze(path):
         "filter_rule": "status OK + fresh; BME gas additionally gas_valid + heater_stable + new_data",
         "auc_rule": "signed trapezoids over adjacent valid samples, no bridge across invalid rows or gap > max_gap_s",
         "signals": {}, "environment_baseline": {}, "warnings": warnings}
+    quality = baseline_quality([r for r in rows if r["phase"]=="BASELINE"],
+                               meta["config"].get("stability"), "BASELINE" in completed and meta.get("kind")=="collect")
+    summary["measurement_quality"] = {
+        "pre_baseline": meta.get("pre_baseline_quality"),
+        "baseline": quality,
+        "baseline_unstable": None if quality["stable"] is None else not quality["stable"],
+        "baseline_started_without_stability": meta.get("baseline_started_without_stability"),
+        "interpretation": "Thay đổi tín hiệu khảo sát; không chứng minh phản ứng mùi. Nền đang trôi/chưa đánh giá làm đáp ứng tương đối thiếu tin cậy."}
+    if meta.get("kind")=="collect":
+        warnings.extend("Chất lượng baseline: "+r for r in quality["reasons"]+quality["advisories"])
     for key in ENV:
         summary["environment_baseline"][key] = baseline_stats(key)
     for key, device in SIGNALS.items():
@@ -173,10 +184,12 @@ def plot(path, rows, events, meta, summary):
         ax.grid(alpha=.2)
         decorate(ax, meta, events, colors)
     axes[-1].set_xlabel("elapsed_s (monotonic)")
-    fig.suptitle(f"RoboNose {meta['run_id']} | {meta['backend']} | {meta['status']}")
+    quality_note = " | BASELINE DRIFT / UNASSESSED" if summary["measurement_quality"]["baseline"]["stable"] is not True and meta.get("kind")=="collect" else ""
+    fig.suptitle(f"RoboNose {meta['run_id']} | {meta['backend']} | {meta['status']}" + quality_note)
     fig.tight_layout()
     save_plot(fig, path / "signals.png", plt)
     fig, axes = plt.subplots(3, 1, sharex=True, figsize=(12, 8))
+    fig.suptitle("Relative signal change; not odor attribution" + quality_note)
     for ax, key in zip(axes, SIGNALS):
         s = summary["signals"][key]
         base = s["baseline"]["mean"]

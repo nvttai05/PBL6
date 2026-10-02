@@ -5,6 +5,8 @@ acquisition-time phase/run context; draining after a transition cannot relabel i
 """
 from dataclasses import dataclass
 from dataclasses import replace
+from collections import deque
+from .quality import assess, baseline_quality
 import codecs
 import queue
 import selectors
@@ -116,6 +118,9 @@ class Session:
         self.stopping, self.exit_code = False, 0
         self.latest = None
         self.saved_handlers = {}
+        self.terminal = None
+        self.collection_enabled = args.command == "collect"
+        self.quality_window = deque()
         self.duration_map = {p: cfg[k] for p, k in (("BASELINE", "baseline_s"), ("EXPOSURE", "exposure_s"), ("RECOVERY", "recovery_s"))}
         self.sample_info = {k: getattr(args, k, None) for k in
             ("sample_description", "person_code", "source", "sampling_method", "purge_method", "lid_state", "distance_cm")}
@@ -141,6 +146,7 @@ class Session:
         self.state = StateMachine(now, self.duration_map)
         self.run = RunWriter(self.args.output, self.backend, self.cfg, self.reader.applied,
                              dict(self.sample_info), run_start=now)
+        self.run.quality_rows = []
         self.run.meta["sensor_uptime_at_start_s"] = now - self.reader.started
         self.ui, self.ui_since = "ACTIVE", now
         self.run.event("run_start", now, "MONITOR", now, {"sensor_uptime_s": now - self.reader.started})
@@ -180,6 +186,10 @@ class Session:
             row = item
             row["pump_command"] = ctx.pump_command
             self.latest = row
+            self.quality_window.append(dict(row))
+            cutoff = row["elapsed_s"] - self.cfg["stability"]["window_s"]
+            while self.quality_window and self.quality_window[0]["elapsed_s"] < cutoff:
+                self.quality_window.popleft()
             session_row = dict(row, phase=ctx.session_phase)
             self.log.row(session_row)
             if ctx.run and not ctx.run.closed:
@@ -187,6 +197,8 @@ class Session:
                 for device in ("bme", "mq135", "mq3"):
                     adjusted[device + "_read_elapsed_s"] = row[device + "_read_elapsed_s"] + self.log.start - ctx.run.start
                 ctx.run.row(adjusted)
+                if adjusted["phase"] == "BASELINE":
+                    ctx.run.quality_rows.append(dict(adjusted))
             for device in ("bme", "mq135", "mq3"):
                 if row[device + "_status"] != "OK":
                     now = self.log.start + row["elapsed_s"]
@@ -203,6 +215,17 @@ class Session:
             self.event("phase_change", {"from": change[0], "to": change[1]}, at=self.state.since)
             print(f"Pha {change[1]}", flush=True)
 
+    def live_quality(self):
+        now = time.monotonic() - self.log.start if self.log else 0
+        return assess(list(self.quality_window), self.cfg["stability"], now, live=True)
+
+    def store_baseline_quality(self, writer):
+        completed = any(i["phase"] == "BASELINE" and i["actual_s"] >= i["planned_s"]-1e-8
+                        for i in self.state.history if i["planned_s"] is not None)
+        quality = baseline_quality(getattr(writer, "quality_rows", []), self.cfg["stability"], completed)
+        writer.meta["baseline_quality"] = quality
+        writer.meta["baseline_unstable"] = None if quality["stable"] is None else not quality["stable"]
+
     def status(self):
         phase = self.state.phase if self.run else self.ui
         remain = self.state.remaining(time.monotonic()) if self.run else None
@@ -213,6 +236,18 @@ class Session:
               f"H={values.get('humidity_pct')} % | P={values.get('pressure_hpa')} hPa | "
               f"BME={values.get('bme_status')}, gas_valid={values.get('gas_valid')}, heater_stable={values.get('heater_stable')} | "
               f"pump command={self.pump.commanded}", flush=True)
+        if phase in ("MONITOR", "BASELINE"):
+            quality = self.live_quality()
+            label = "ỔN ĐỊNH THEO TIÊU CHÍ" if quality["stable"] is True else "ĐANG TRÔI" if quality["stable"] is False else "CHƯA ĐỦ DỮ LIỆU"
+            trends = quality["signals"]
+            def fmt(value):
+                return "--" if value is None else f"{value:+.3g}"
+            print(f"Ổn định [{self.cfg['stability']['window_s']:g}s]: {label} | "
+                  f"gas={fmt(trends['gas_resistance_ohm']['slope_pct_per_min'])} %/phút | "
+                  f"T={fmt(trends['temperature_c']['slope_per_min'])} °C/phút | "
+                  f"H={fmt(trends['humidity_pct']['slope_per_min'])} điểm %RH/phút | "
+                  + "; ".join(quality["reasons"] + quality["advisories"]), flush=True)
+
 
     def finish_run(self, status, reason):
         if not self.run:
@@ -226,8 +261,10 @@ class Session:
             self.ui, self.ui_since = "WAIT_NAME", end_at
             self.acq.context = self.context()
         self.finishing_end = (end_at, ended_iso)
-        off_at = end_at
         error = self.pump.off_best_effort()
+        off_at = time.monotonic()
+        self.log.event("pump_command", off_at, "WAIT_NAME", end_at,
+                       {"command": self.pump.commanded, "reason": "run end", "error": error})
         old.event("pump_command", off_at, self.state.phase, self.state.since,
                   {"command": self.pump.commanded, "reason": "run end", "error": error})
         if error:
@@ -246,6 +283,7 @@ class Session:
         # Once no old read is in flight, at most 64 queued items can belong to old.
         self.drain(time_budget=None)
         old.event("run_end", end_at, self.state.phase, self.state.since, {"status": status, "reason": reason})
+        self.store_baseline_quality(old)
         old.finish(self.state, status, end_at, reason, ended_at=ended_iso)
         self.pending = old
         self.finishing = None
@@ -277,7 +315,10 @@ class Session:
                 line = "skip"
             else:
                 return
-        cmd, _, text = line.partition(" ")
+        parts = line.split(maxsplit=1)
+        cmd = parts[0].casefold()
+        text = parts[1] if len(parts) == 2 else ""
+        normalized = cmd + (" " + text if text else "")
         if cmd in ("help", "?"):
             print(HELP, flush=True)
         elif cmd == "status":
@@ -319,7 +360,33 @@ class Session:
             if self.run:
                 self.run.meta["sample"] = dict(self.sample_info)
             self.event("sample_info", {field: value})
-        elif cmd == "next" and self.ui == "BETWEEN_RUNS" and self.args.command == "collect":
+        elif cmd == "start":
+            if text:
+                raise ValueError("start không nhận tham số; nhập start rồi Enter")
+            if self.reader is None or self.acq is None or not self.acq.thread.is_alive():
+                raise ValueError("Chưa sẵn sàng: reader/vòng thu chưa hoạt động; chờ khởi tạo cảm biến và vòng đọc hoàn tất")
+            if self.run is None and self.ui == "MONITOR" and self.args.command == "monitor":
+                # Preserve continuous warmup in the existing session log, keep
+                # the same reader/heater, open a new run with its own time basis.
+                self.collection_enabled = True
+                self.log.meta["kind"] = "session"
+                self.new_run()
+            if self.run is None:
+                raise ValueError(f"start cần pha MONITOR; hiện đang {self.ui}. Dùng next để mở lượt mới")
+            if self.state.phase != "MONITOR":
+                raise ValueError(f"start chỉ hợp lệ trong MONITOR; hiện đang {self.state.phase}")
+            quality = self.live_quality()
+            self.run.meta["pre_baseline_quality"] = quality
+            self.run.meta["baseline_started_without_stability"] = quality["stable"] is not True
+            if self.log:
+                self.event("baseline_quality_at_start", quality)
+            if quality["stable"] is not True or quality["advisories"]:
+                print("Cảnh báo bắt đầu BASELINE: " + "; ".join(quality["reasons"] + quality["advisories"])
+                      + ". Vẫn bắt đầu theo lệnh người dùng; không suy ra phản ứng mùi.", flush=True)
+            if hasattr(self.run, "sync"):
+                self.run.sync(force=True)
+            self.change(self.state.command("start", time.monotonic()))
+        elif cmd == "next" and self.ui == "BETWEEN_RUNS" and self.collection_enabled:
             self.new_run()
         elif self.ui == "WAIT_NAME" and cmd in ("name", "skip"):
             self.finalize_pending(name=text if cmd == "name" else "")
@@ -329,11 +396,22 @@ class Session:
             complete = cmd == "finish" and self.state.phase == "WAIT_FINISH"
             self.finish_run("COMPLETE" if complete else "ABORTED", "user " + cmd)
         elif self.run:
-            self.change(self.state.command(line, time.monotonic()))
+            self.change(self.state.command(normalized, time.monotonic()))
         else:
             raise ValueError(f"Lệnh không hợp lệ trong {self.ui}")
 
     def run_session(self):
+        if not self.args.auto and sys.stdin.isatty() and sys.stdout.isatty():
+            try:
+                from .terminal import TerminalInput
+            except ImportError as exc:
+                raise RuntimeError("Thiếu prompt-toolkit: chạy .venv/bin/python -m pip install -r requirements-lock.txt") from exc
+            with TerminalInput() as terminal:
+                self.terminal = terminal
+                return self._run_session()
+        return self._run_session()
+
+    def _run_session(self):
         status, reason = "COMPLETE", "user quit"
         selector = selectors.DefaultSelector()
         stdin_buffer = ""
@@ -349,6 +427,8 @@ class Session:
             self.ui_since = start
             self.log = RunWriter(self.args.output, self.backend, self.cfg, self.reader.applied,
                                  dict(self.sample_info), run_start=start, kind="session" if self.args.command == "collect" else "monitor")
+            self.log.event("pump_command", start, "MONITOR", start,
+                           {"command": self.pump.commanded, "reason": "initialization", "feedback": "none"})
             self.log_state = StateMachine(start, self.duration_map)
             self.analysis_thread.start()
             if self.args.command == "collect":
@@ -363,7 +443,7 @@ class Session:
                 self.stopping = True
             for sig in (signal.SIGINT, signal.SIGTERM):
                 self.saved_handlers[sig] = signal.signal(sig, on_signal)
-            if not self.args.auto:
+            if not self.args.auto and self.terminal is None:
                 try:
                     selector.register(sys.stdin, selectors.EVENT_READ)
                 except (PermissionError, ValueError):
@@ -377,12 +457,26 @@ class Session:
                 if now - last_display >= self.args.display_interval:
                     self.status()
                     last_display = now
-                if self.args.duration and now - start >= self.args.duration:
+                if self.args.duration and self.ui == "MONITOR" and not self.run and now - start >= self.args.duration:
                     self.stopping = True
                     reason = "monitor duration"
                 if self.args.auto:
                     self.auto(now)
                     time.sleep(.01)
+                elif self.terminal is not None:
+                    message = self.terminal.poll(timeout=.02)
+                    if message:
+                        kind, line = message
+                        if kind == "line":
+                            self.safe_command(line)
+                        elif kind == "interrupt":
+                            self.phase_error = "Ctrl+C"
+                            self.stopping = True
+                        elif kind == "eof":
+                            reason = "stdin EOF"
+                            self.stopping = True
+                        else:
+                            raise RuntimeError(f"Terminal input: {line}")
                 else:
                     # os.read avoids TextIO readline buffering: multiple piped commands are not stranded.
                     import os
@@ -445,6 +539,7 @@ class Session:
                         self.update_context()
                     run_status = "ERROR" if status == "ERROR" else "ABORTED"
                     active.event("run_end", run_now, self.state.phase, self.state.since, {"status": run_status, "reason": reason})
+                    self.store_baseline_quality(active)
                     active.finish(self.state, run_status, run_now, reason, ended_at=run_ended)
                     self.jobs.put(active.path)
                     print(f"Đã giữ {run_status}: {active.path}", flush=True)
@@ -492,6 +587,10 @@ class Session:
 
     def safe_command(self, line):
         try:
+            if self.log:
+                parts = line.strip().split(maxsplit=1)
+                normalized = parts[0].casefold() + (" " + parts[1] if len(parts)==2 else "") if parts else ""
+                self.event("command_received", {"raw": line, "normalized": normalized})
             self.command(line)
         except ValueError as exc:
             print(f"Lệnh bị từ chối: {exc}", flush=True)

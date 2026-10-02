@@ -22,7 +22,9 @@
 ## Triển khai hiện tại
 - CLI: `.venv/bin/python -m robonose`; sim mặc định, `--hardware` là lựa chọn rõ ràng.
 - Sim và pump-disabled không được khởi tạo GPIO bơm; doctor chỉ đọc metadata/đường dẫn.
-- GPIO BCM/cực tính chưa xác nhận: giữ pump disabled, không tự đặt giá trị ví dụ.
+- JZ-MOS TRIG/PWM dùng BCM17 (chân vật lý 11); cực tính còn phải xác nhận: giữ pump disabled đến khi confirmed=true và active_high được khai báo.
 - Không suy ra ppm/IAQ; giữ raw, cờ chất lượng và lỗi đọc. Count/voltage phải cùng conversion.
 - Chạy `.venv/bin/python -m pytest -q` khi sửa logic thu/lưu/phân tích; chỉ test mô phỏng.
+- Đánh giá ổn định gas/T/H là cảnh báo, không chặn start; không diễn giải baseline đang trôi là phản ứng mùi.
+- pump-test chỉ mở GPIO với --hardware --enable-pump và cấu hình đã xác nhận; sim không mở GPIO/I2C.
 - Schema ở `docs/schema.md`; driver Bosch vendored giữ nguyên mã và giấy phép BSD-3-Clause.

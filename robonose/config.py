@@ -11,8 +11,15 @@ DEFAULT = {
         "heater_c": 320, "heater_ms": 150, "temperature_oversampling": 8,
         "humidity_oversampling": 2, "pressure_oversampling": 4,
         "ads_gain": 1.0, "ads_data_rate": 128, "mq135_channel": 0,
-        "mq3_channel": 1, "mq135_divider_factor": None, "mq3_divider_factor": None},
-    "pump": {"enabled": False, "confirmed": False, "gpio_bcm": None, "active_high": None},
+        "mq3_channel": 1, "mq135_divider_factor": None, "mq3_divider_factor": None,
+        "mq135_divider_description": "Chưa xác nhận; dự kiến 10 kΩ/10 kΩ",
+        "mq3_divider_description": "Chưa xác nhận; dự kiến 10 kΩ/10 kΩ"},
+    "pump": {"enabled": False, "confirmed": False, "gpio_bcm": 17, "active_high": None},
+    "stability": {"window_s": 30.0, "min_samples": 5, "min_window_fraction": .8,
+        "max_gap_s": 3.0, "max_invalid_fraction": .2, "gas_epsilon_ohm": 1e-9,
+        "gas_pct_per_min": 5.0, "gas_range_pct": 5.0,
+        "temperature_per_min": .3, "temperature_range": .2,
+        "humidity_per_min": 1.0, "humidity_range": 1.0, "temperature_warning_c": 35.0},
     "analysis": {"min_baseline_samples": 3, "baseline_epsilon": 1e-9,
         "baseline_drift_pct": 5.0, "recovery_tolerance_pct": 10.0,
         "missing_fraction": 0.1, "adc_limit_count": 32700, "max_gap_s": 3.0},
@@ -80,3 +87,16 @@ def validate(cfg):
         raise ValueError("min_baseline_samples >= 2")
     if not 0 <= a["missing_fraction"] <= 1 or not 1 <= a["adc_limit_count"] <= 32767:
         raise ValueError("Ngưỡng missing_fraction/adc_limit_count không hợp lệ")
+
+    stability = cfg["stability"]
+    for k in ("window_s", "max_gap_s", "gas_epsilon_ohm", "gas_pct_per_min", "gas_range_pct",
+              "temperature_per_min", "temperature_range", "humidity_per_min", "humidity_range", "temperature_warning_c"):
+        positive(stability[k], "stability."+k)
+    if type(stability["min_samples"]) is not int or stability["min_samples"]<2:
+        raise ValueError("stability.min_samples >= 2")
+    for k in ("min_window_fraction", "max_invalid_fraction"):
+        if not isinstance(stability[k], (int,float)) or isinstance(stability[k],bool) or not math.isfinite(stability[k]) or not 0<=stability[k]<=1:
+            raise ValueError("stability."+k+" phải trong 0..1")
+    for sensor in ("mq135", "mq3"):
+        if not isinstance(h[sensor+"_divider_description"],str):
+            raise ValueError("divider_description phải là văn bản")

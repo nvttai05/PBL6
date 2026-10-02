@@ -61,9 +61,17 @@ class RunWriter:
             "phase_intervals": [], "extensions": [], "rows": 0,
             "time_basis": "elapsed_s = monotonic - run_start; ISO Asia/Ho_Chi_Minh",
             "pump_feedback": "command only; no physical feedback"}
+        h = cfg["hardware"]
+        self.meta["adc_inputs"] = {sensor: {
+            "channel": h[sensor+"_channel"], "voltage_location": "ADS1115 input",
+            "divider_description": h.get(sensor+"_divider_description", "Chưa khai báo"),
+            "divider_factor_confirmed": h[sensor+"_divider_factor"] is not None,
+            "ao_estimate_factor": h[sensor+"_divider_factor"],
+            "ao_estimate_rule": "AO estimate = ADS voltage * confirmed factor; null otherwise"}
+            for sensor in ("mq135", "mq3")}
         from .readers import package_version
         self.meta["software"] = {"python": sys.version, "platform": platform.platform(),
-            "dependencies": {k: package_version(k) for k in ("numpy", "matplotlib", "smbus2", "gpiozero", "lgpio")}}
+            "dependencies": {k: package_version(k) for k in ("numpy", "matplotlib", "prompt-toolkit", "smbus2", "gpiozero", "lgpio")}}
         atomic_json(self.path / "metadata.json", self.meta)
         self.sync(force=True)
         sync_directory(self.path)

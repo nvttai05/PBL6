@@ -15,8 +15,18 @@ def parser():
     doctor.add_argument("--config")
     analysis = sub.add_parser("analyze", help="Phân tích lại offline; không sửa raw")
     analysis.add_argument("run_directory")
+    pump_test = sub.add_parser("pump-test", help="OFF → ON ngắn → OFF; không mở cảm biến; sim mặc định")
+    pump_test.add_argument("--config")
+    backend = pump_test.add_mutually_exclusive_group()
+    backend.add_argument("--hardware", action="store_true")
+    backend.add_argument("--sim", action="store_true")
+    pump_option = pump_test.add_mutually_exclusive_group()
+    pump_option.add_argument("--enable-pump", action="store_true")
+    pump_option.add_argument("--pump-disabled", action="store_true")
+    pump_test.add_argument("--seconds", type=float, default=2.0)
+    pump_test.add_argument("--output", default="data")
     for name in ("collect", "monitor"):
-        s = sub.add_parser(name)
+        s = sub.add_parser(name, help="Theo dõi; start mở lượt thu" if name == "monitor" else "Thu lượt từ MONITOR/warmup")
         s.add_argument("--config")
         backend = s.add_mutually_exclusive_group()
         backend.add_argument("--hardware", action="store_true", help="Mở cảm biến thật khi bạn tự chạy")
@@ -34,13 +44,13 @@ def parser():
         s.add_argument("--auto", action="store_true", help="Tự thao tác CHỈ trong sim, để kiểm thử")
         s.add_argument("--auto-warmup", type=float, default=1.)
         s.add_argument("--auto-wait", type=float, default=.5)
-        s.add_argument("--duration", type=float, help="Giới hạn thời gian monitor; collect dùng finish/abort")
+        s.add_argument("--duration", type=float, help="Giới hạn monitor trước start; collect dùng finish/abort")
         for field in ("sample_description", "person_code", "source", "sampling_method", "purge_method", "lid_state", "distance_cm"):
             s.add_argument("--" + field.replace("_", "-"), default="")
     return p
 
 def doctor(cfg):
-    dependencies = {name: package_version(name) for name in ("numpy", "matplotlib", "pytest", "smbus2", "gpiozero", "lgpio")}
+    dependencies = {name: package_version(name) for name in ("numpy", "matplotlib", "prompt-toolkit", "pytest", "smbus2", "gpiozero", "lgpio")}
     lib = Path(__file__).parent / "native/librobonose_bme.so"
     result = {"program_version": __version__, "python": sys.version, "executable": sys.executable,
         "virtualenv": sys.prefix != sys.base_prefix, "os": platform.platform(), "architecture": platform.machine(),
@@ -49,7 +59,7 @@ def doctor(cfg):
         "hardware_opened": False, "pump_config": cfg["pump"], "config": cfg,
         "note": "Chỉ kiểm tra metadata/đường dẫn. Không import GPIO, không mở I2C; chưa xác nhận cảm biến/bơm."}
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0 if dependencies["numpy"] and dependencies["matplotlib"] else 1
+    return 0 if dependencies["numpy"] and dependencies["matplotlib"] and dependencies["prompt-toolkit"] else 1
 
 def main(argv=None):
     args = parser().parse_args(argv)
@@ -62,6 +72,14 @@ def main(argv=None):
         cfg = load(args.config, check=args.command == "doctor")
         if args.command == "doctor":
             return doctor(cfg)
+        if args.command == "pump-test":
+            positive(args.seconds, "seconds")
+            if args.seconds > 10:
+                raise ValueError("pump-test giới hạn <=10 giây")
+            cfg["pump"]["enabled"] = bool(args.hardware and args.enable_pump and not args.pump_disabled)
+            validate(cfg)
+            from .pump_test import run
+            return run(args,cfg)
         for option, key in (("sample_hz", "sample_hz"), ("baseline", "baseline_s"), ("exposure", "exposure_s"), ("recovery", "recovery_s")):
             if getattr(args, option) is not None:
                 cfg[key] = getattr(args, option)

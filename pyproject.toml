@@ -7,11 +7,11 @@ name = "robonose"
 version = "1.0.0"
 description = "Thu khảo sát phản ứng cảm biến RoboNose"
 requires-python = ">=3.11"
-dependencies = ["numpy>=1.24", "matplotlib>=3.7"]
+dependencies = ["numpy>=1.24", "matplotlib>=3.7", "prompt-toolkit>=3.0.43,<4"]
 
 [project.optional-dependencies]
 hardware = ["smbus2>=0.4.2", "gpiozero>=2.0", "lgpio>=0.2.2"]
-test = ["pytest>=8"]
+test = ["pytest>=8", "pyte>=0.8.2,<1"]
 
 [project.scripts]
 robonose = "robonose.cli:main"
