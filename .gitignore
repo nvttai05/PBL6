@@ -10,3 +10,8 @@ __pycache__/
 data/
 logs/
 *.log
+.cache/
+*.so
+*.egg-info/
+build/
+dist/

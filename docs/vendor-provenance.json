@@ -1,0 +1,13 @@
+{
+  "source": "https://github.com/boschsensortec/BME68x_SensorAPI",
+  "retrieved": "2026-10-02",
+  "version": "v4.4.8",
+  "license": "BSD-3-Clause",
+  "source_files_unmodified": true,
+  "sha256": {
+    "LICENSE": "56df116398e0b72a12ae353d93002d29175583590283ced2c2510e3d8075546f",
+    "bme68x_defs.h": "5f59c0bafbcc416c091a1a1cc40bb7362f0b48ea02ac7fa5197813f491de01aa",
+    "bme68x.c": "bad525ea57fe57a5d7dda19d287781bcbab50fdbf2dedea737c16b206cbe0157",
+    "bme68x.h": "09ed6babf92955ced360790958e2e2f03efb85bc4f0a8a864a4151a905eaf0ca"
+  }
+}

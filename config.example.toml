@@ -1,0 +1,39 @@
+# Sao chép thành config.toml, chỉnh theo dây thực tế. GPIO cố ý chưa đặt.
+sample_hz = 1.0
+fsync_interval_s = 5.0
+baseline_s = 30.0
+exposure_s = 60.0
+recovery_s = 60.0
+seed = 688
+
+[hardware]
+i2c_bus = 1
+bme_address = 0x77
+ads_address = 0x48
+heater_c = 320
+heater_ms = 150
+temperature_oversampling = 8
+humidity_oversampling = 2
+pressure_oversampling = 4
+ads_gain = 1.0
+ads_data_rate = 128
+mq135_channel = 0
+mq3_channel = 1
+# Chỉ thêm khi đã đo/xác nhận: AO = ADS voltage * hệ số.
+# mq135_divider_factor = 2.0
+# mq3_divider_factor = 2.0
+
+[pump]
+enabled = false
+confirmed = false
+# gpio_bcm = ...
+# active_high = true hoặc false, theo mạch đã xác nhận
+
+[analysis]
+min_baseline_samples = 3
+baseline_epsilon = 1e-9
+baseline_drift_pct = 5.0
+recovery_tolerance_pct = 10.0
+missing_fraction = 0.1
+adc_limit_count = 32700
+max_gap_s = 3.0

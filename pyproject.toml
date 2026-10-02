@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=66"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robonose"
+version = "1.0.0"
+description = "Thu khảo sát phản ứng cảm biến RoboNose"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.24", "matplotlib>=3.7"]
+
+[project.optional-dependencies]
+hardware = ["smbus2>=0.4.2", "gpiozero>=2.0", "lgpio>=0.2.2"]
+test = ["pytest>=8"]
+
+[project.scripts]
+robonose = "robonose.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["robonose*"]
+
+[tool.setuptools.package-data]
+robonose = ["native/*.c", "native/vendor/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
