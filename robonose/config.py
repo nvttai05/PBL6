@@ -5,7 +5,7 @@ import tomllib
 
 DEFAULT = {
     "sample_hz": 1.0, "fsync_interval_s": 5.0,
-    "baseline_s": 30.0, "exposure_s": 60.0, "recovery_s": 60.0,
+    "baseline_s": 60.0, "exposure_s": 120.0, "recovery_s": 60.0,
     "seed": 688,
     "hardware": {"i2c_bus": 1, "bme_address": 0x77, "ads_address": 0x48,
         "heater_c": 320, "heater_ms": 150, "temperature_oversampling": 8,

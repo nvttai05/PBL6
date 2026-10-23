@@ -32,3 +32,11 @@ struct nội bộ Bosch sang ctypes. `docs/vendor-provenance.json` ghi hash ngu�
 Giới hạn: đây là công cụ khảo sát raw, không calibration/ML. GPIO OFF best-effort
 không thay thế trạng thái an toàn điện khi Pi mất nguồn. Linux scheduling và
 conversion tạo sai lệch thời gian, đã lưu duration/lag/timestamp để phân tích.
+
+
+Giai đoạn thăm dò dùng pump-disabled. Context thêm state/source bơm ngoài tại
+đầu phép đọc; đây là khai báo người dùng, không GPIO. external-pump_report/marker
+dùng clock của raw, metadata lưu trạng thái đầu/cuối, abort không đổi nguồn ngoài.
+TTY có một PromptSession/patch_stdout renderer riêng, lệnh queue về main;
+selectors/decoder chỉ dùng khi stdin là pipe. Writer đóng cả hai file ngay cả khi
+một bước sync/close lỗi, giữ ERROR nếu ghi metadata được.

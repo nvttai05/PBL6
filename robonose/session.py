@@ -23,9 +23,10 @@ from .state import StateMachine, TIMED
 from .writer import RunWriter
 
 HELP = """Lệnh: start | expose | recover | extend 30/60/<giây> | finish | abort
-mark <ghi chú> | status | pump on/off | durations <baseline> <exposure> <recovery>
+mark <ghi chú> | external-pump on/off/not-used/unknown [ghi chú] | status | durations <baseline> <exposure> <recovery>
 info <sample_description/person_code/source/sampling_method/purge_method/lid_state/distance_cm> <văn bản>
 Sau thu: name <tên> hoặc skip; notes <ghi chú> hoặc skip; next | quit.
+Bơm ngoài: khai báo thủ công, không phải GPIO/phản hồi đo được.
 Các khoảng chờ vẫn thu. Xả buồng/đưa mẫu là thao tác vật lý của bạn."""
 
 @dataclass(frozen=True)
@@ -36,6 +37,8 @@ class Context:
     session_phase: str
     pump_command: str
     deadline: float | None = None
+    external_pump_state: str = "unknown"
+    external_pump_source: str = "not_reported"
 
     def at(self, now):
         if self.deadline is not None and now >= self.deadline and self.phase in TIMED:
@@ -121,15 +124,18 @@ class Session:
         self.terminal = None
         self.collection_enabled = args.command == "collect"
         self.quality_window = deque()
+        self.external_pump_state = getattr(args, "external_pump_state", "unknown")
+        self.external_pump_source = "not_reported" if self.external_pump_state == "unknown" else "user_reported"
         self.duration_map = {p: cfg[k] for p, k in (("BASELINE", "baseline_s"), ("EXPOSURE", "exposure_s"), ("RECOVERY", "recovery_s"))}
         self.sample_info = {k: getattr(args, k, None) for k in
             ("sample_description", "person_code", "source", "sampling_method", "purge_method", "lid_state", "distance_cm")}
 
     def context(self):
         if self.run:
-            return Context(self.run, self.state.phase, self.state.since, self.state.phase, self.pump.commanded, self.state.deadline)
+            return Context(self.run, self.state.phase, self.state.since, self.state.phase, self.pump.commanded, self.state.deadline, self.external_pump_state, self.external_pump_source)
         now = self.ui_since
-        return Context(None, self.ui, now, self.ui, self.pump.commanded)
+        return Context(None, self.ui, now, self.ui, self.pump.commanded,
+                       external_pump_state=self.external_pump_state, external_pump_source=self.external_pump_source)
 
     def update_context(self):
         if self.log and hasattr(self, "log_state"):
@@ -141,12 +147,18 @@ class Session:
         if self.acq:
             self.acq.set_context(self.context())
 
+    def external_pump_metadata(self):
+        return {"initial_state": self.external_pump_state, "latest_state": self.external_pump_state,
+                "source": self.external_pump_source, "physical_feedback": None,
+                "meaning": "User reports external power operation; no GPIO command and no measured feedback"}
+
     def new_run(self):
         now = time.monotonic()
         self.state = StateMachine(now, self.duration_map)
         self.run = RunWriter(self.args.output, self.backend, self.cfg, self.reader.applied,
                              dict(self.sample_info), run_start=now)
         self.run.quality_rows = []
+        self.run.meta["external_pump"] = self.external_pump_metadata()
         self.run.meta["sensor_uptime_at_start_s"] = now - self.reader.started
         self.ui, self.ui_since = "ACTIVE", now
         self.run.event("run_start", now, "MONITOR", now, {"sensor_uptime_s": now - self.reader.started})
@@ -185,6 +197,8 @@ class Session:
                 raise RuntimeError(f"Reader worker: {item}")
             row = item
             row["pump_command"] = ctx.pump_command
+            row["external_pump_state"] = ctx.external_pump_state
+            row["external_pump_source"] = ctx.external_pump_source
             self.latest = row
             self.quality_window.append(dict(row))
             cutoff = row["elapsed_s"] - self.cfg["stability"]["window_s"]
@@ -235,7 +249,8 @@ class Session:
               f"MQ3={values.get('mq3_voltage_v')} V | T={values.get('temperature_c')} °C | "
               f"H={values.get('humidity_pct')} % | P={values.get('pressure_hpa')} hPa | "
               f"BME={values.get('bme_status')}, gas_valid={values.get('gas_valid')}, heater_stable={values.get('heater_stable')} | "
-              f"pump command={self.pump.commanded}", flush=True)
+              f"GPIO pump command={self.pump.commanded} (không nói trạng thái bơm ngoài) | "
+              f"bơm ngoài={self.external_pump_state} (người dùng khai báo; chưa đo)", flush=True)
         if phase in ("MONITOR", "BASELINE"):
             quality = self.live_quality()
             label = "ỔN ĐỊNH THEO TIÊU CHÍ" if quality["stable"] is True else "ĐANG TRÔI" if quality["stable"] is False else "CHƯA ĐỦ DỮ LIỆU"
@@ -327,6 +342,21 @@ class Session:
             self.stopping = True
         elif cmd == "mark":
             self.event("marker", {"text": text})
+        elif cmd == "external-pump":
+            parts = text.split(maxsplit=1)
+            if not parts or parts[0] not in ("on", "off", "not-used", "unknown"):
+                raise ValueError("external-pump on/off/not-used/unknown [ghi chú]; chỉ ghi nhận thủ công")
+            self.external_pump_state = parts[0]
+            self.external_pump_source = "user_reported"
+            self.event("external_pump_report", {"state": parts[0], "source": "user_reported",
+                       "note": parts[1] if len(parts)>1 else "", "physical_feedback": None,
+                       "gpio_command_sent": False})
+            for writer in (self.log, self.run):
+                if writer:
+                    writer.meta["external_pump"]["latest_state"] = parts[0]
+                    writer.meta["external_pump"]["source"] = "user_reported"
+            self.update_context()
+            print(f"Đã ghi bơm ngoài={parts[0]} theo khai báo; không gửi GPIO, không đo trạng thái.", flush=True)
         elif cmd == "pump":
             if text not in ("on", "off"):
                 raise ValueError("pump on hoặc pump off")
@@ -427,6 +457,10 @@ class Session:
             self.ui_since = start
             self.log = RunWriter(self.args.output, self.backend, self.cfg, self.reader.applied,
                                  dict(self.sample_info), run_start=start, kind="session" if self.args.command == "collect" else "monitor")
+            self.log.meta["external_pump"] = self.external_pump_metadata()
+            self.log.event("external_pump_report", start, "MONITOR", start,
+                           {**self.external_pump_metadata(), "state":self.external_pump_state,
+                            "reason":"initial declaration", "gpio_command_sent":False})
             self.log.event("pump_command", start, "MONITOR", start,
                            {"command": self.pump.commanded, "reason": "initialization", "feedback": "none"})
             self.log_state = StateMachine(start, self.duration_map)
@@ -538,9 +572,10 @@ class Session:
                     if self.run:
                         self.update_context()
                     run_status = "ERROR" if status == "ERROR" else "ABORTED"
-                    active.event("run_end", run_now, self.state.phase, self.state.since, {"status": run_status, "reason": reason})
-                    self.store_baseline_quality(active)
-                    active.finish(self.state, run_status, run_now, reason, ended_at=run_ended)
+                    if not active.closed:
+                        active.event("run_end", run_now, self.state.phase, self.state.since, {"status": run_status, "reason": reason})
+                        self.store_baseline_quality(active)
+                        active.finish(self.state, run_status, run_now, reason, ended_at=run_ended)
                     self.jobs.put(active.path)
                     print(f"Đã giữ {run_status}: {active.path}", flush=True)
                 except Exception as exc:

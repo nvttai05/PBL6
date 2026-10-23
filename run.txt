@@ -1,0 +1,14 @@
+.venv/bin/python -m robonose collect \
+  --hardware \
+  --pump-disabled \
+  --config config.example.toml \
+  --baseline 60 \
+  --exposure 120 \
+  --recovery 60 \
+  --external-pump-state unknown \
+  --sample-description "Thu tham do; nguon mau cu the ghi trong ten va notes" \
+  --sampling-method "Hut khi qua ong; buong cam bien dong; doi nguon khi bang tay" \
+  --purge-method "Chuyen dau lay khi ve vi tri khi phong co dinh" \
+  --lid-state "dong"
+
+scp -r pi@192.168.2.108:/home/pi/robonosev1.0/data/exploration/2026-10-13 "D:\HocTap\PBL6\data\chua_co_loc_khi_van_3_c"

@@ -306,3 +306,92 @@ Không commit/push. Đối chiếu checksum nguồn hardware lần cuối: 6/6 k
 PTY sau thêm dòng chất lượng: monitor nhập s→start, raw 10→70 dòng;
 mỗi ký tự 5–9 trạng thái mới, rồi x/Backspace giữ start, raw lên 94 dòng.
 Collect tương tự 10→71 rồi lên 95 dòng. Không tái hiện mất ký tự/chèn lệnh.
+
+## Hoàn thiện thu thăm dò với bơm ngoài (03/10/2026)
+
+Phạm vi hiện hành: không điều khiển bơm từ Pi, không chạy pump-test, không mở
+GPIO/I2C thật. Checklist JZ-MOS ở phần lịch sử phía trên không áp dụng cho lượt này.
+Hướng dẫn hiện hành: docs/huong_dan_thu_mau.md.
+
+Git status trước sửa chỉ có HUONG_DAN_THU_MAU_ROBONOSE_V1.md chưa tracked.
+File riêng đó được đọc nhưng giữ nguyên. Đã đọc AGENTS, README, cả hai config
+example/JZ-MOS, CLI/readers/state/session/writer/analysis/quality/terminal,
+schema/design/review và các test; giữ driver Bosch và dependency hiện có.
+
+Thay đổi:
+- doctor có --pump-disabled, bỏ enable từ config trước validate; vẫn chỉ đọc
+  metadata/đường dẫn, không mở sensor hay GPIO.
+- collect/monitor có --external-pump-state unknown/not-used/off/on (unknown mặc định).
+  external-pump <state> [ghi chú] chỉ tạo báo cáo người dùng, không GPIO.
+  Raw thêm external_pump_state/source, metadata/summary giữ initial/latest/source,
+  physical_feedback=null. Snapshot đầu vòng đọc giữ đúng trạng thái của mẫu
+  đang đọc dở. Abort/finish/next không tự đổi trạng thái nguồn ngoài.
+- Màn hình phân biệt GPIO command=DISABLED với bơm ngoài chưa đo. mark nguyên văn
+  không tự suy ra ON/OFF; mốc nhận Enter dùng cùng clock raw. CLI không ép lịch
+  bơm, phương pháp lấy mẫu hoặc thời gian warmup.
+- Sửa lỗi đóng lượt: sync/close raw thất bại vẫn cố đóng events; ghi ERROR/lý do
+  nếu metadata còn ghi được. Lượt đã đóng nhưng có lỗi vẫn được gửi phân tích
+  thay vì ghi tiếp events vào file đóng rồi bỏ qua summary/PNG.
+- README/checklist bỏ luồng điều khiển JZ-MOS trong giai đoạn này; AGENTS/config
+  chú thích chế độ bơm ngoài. Hướng dẫn mới chi tiết đối chứng 30–60–60 không mẫu/
+  không bơm, qua ống, mở nắp, mark/khai báo nguồn, extend/name/notes/next/quit,
+  ABORTED/ERROR, đọc raw/% và ví dụ mẫu cơ thể/quần áo không định danh.
+- Pipeline/timer/renderer/driver/đơn vị/quy tắc null/quality trước đó giữ nguyên.
+  Gas trôi mạnh/T~39°C vẫn chỉ là cảnh báo chất lượng, không suy ra mùi.
+
+Kiểm thử mới tests/test_external_pump.py:
+backend hardware + reader mock, guard chặn import GPIO và device opens, kể cả
+config enabled=true/confirmed=false được pump-disabled ghi đè; quit/abort/EOF/
+mất reader giữa lượt. Doctor/monitor và analyze offline cũng dưới guard.
+Khai báo nguồn ngoài ON giữ qua abort/next (không khẳng định tự OFF), OFF ghi sau
+theo thao tác khai báo; GPIO command vẫn DISABLED. Marker Unicode giữ nguyên.
+Mẫu in-flight giữ snapshot trước khi khai báo thay đổi; deadline chuyển WAIT đúng.
+Lỗi sync/close giữ raw/events, ERROR metadata; test Session close-error thực sự
+render summary + cả PNG. Không test nào gửi GPIO thật.
+
+Test reader-lost ban đầu đóng stdin bằng communicate quá sớm, gặp EOF trước lỗi
+reader. Đã sửa test giữ stdin mở tới khi mock worker mất cảm biến; test nhánh ERROR
+đạt sau sửa, không thay đổi logic thu để chiều test. 10 test mới đầu đạt 22.30 s;
+test monitor/analyze bổ sung đạt 12.08 s. Test pump_test bị loại khỏi suite theo
+phạm vi người dùng, không chạy cả lệnh CLI lẫn các test pump-test mô phỏng.
+
+Phiên scripts/verify_interactive.py không --auto, có guard chặn import GPIO/I2C,
+builtins/io/os.open thiết bị và load thư viện GPIO/Bosch. COMPLETE 118 dòng,
+16 lỗi BME giữ null/lý do, ADS vẫn ghi; baseline/exposure 0.8/0.8 s, recovery
+1.3 s gồm extension 0.5 s, timer sai số số thực <1e-9. Khai báo nguồn ngoài
+not-used → on → off chỉ diễn tập nhật ký; mọi raw pump_command=DISABLED.
+Metadata/events/raw nhất quán, đủ các file và hai PNG. Analyze offline exit0,
+checksum raw/events/metadata không đổi.
+
+| Pha | CSV trước → sau khi để input mở |
+|---|---:|
+| MONITOR | 1 → 14 |
+| WAIT_EXPOSURE (gõ nửa ký tự UTF-8 chưa Enter) | 31 → 45 |
+| WAIT_RECOVERY | 62 → 76 |
+| WAIT_FINISH | 93 → 107 |
+| WAIT_NAME | 119 → 133 |
+| WAIT_NOTES | 133 → 142 |
+
+Report: logs/interactive_review_8e3973f91edc.json.
+Lượt: data/simulation/2026-10-03/Rà_soát_áo_20261003_105642_213585e8555542beb55373a74f560a51/.
+Doctor --pump-disabled exit0, hardware_opened=false; không khẳng định hardware đạt.
+Đối chiếu parser: 7 lệnh trong hướng dẫn mới và 10 lệnh README hợp lệ, không
+thực thi các lệnh hardware. Snapshot trước sửa:
+logs/manual_pump_preservation_08b6ca0970.json; 139/139 file data trước lượt giữ nguyên
+cùng hash file hướng dẫn riêng. Output mô phỏng mới không ghi đè lượt cũ.
+
+File sửa: AGENTS.md, README.md, config.example.toml, docs/design.md,
+docs/schema.md, docs/review.md; robonose/cli.py, schema.py, session.py, writer.py,
+analysis.py; scripts/verify_interactive.py. File mới: docs/huong_dan_thu_mau.md,
+tests/test_external_pump.py. Không sửa config.jz-mos.toml, hướng dẫn riêng, data cũ,
+driver/native, dependency hay hệ điều hành. Chưa commit/push.
+
+Kết quả suite cuối: .venv/bin/python -m pytest -q -k 'not pump_test'
+--basetemp .cache/manual_external_final_20261003c:
+77 passed, 6 deselected in 166.80 s. Sau đó test monitor hardware-mock/analyze
+offline dưới guard bổ sung chạy riêng: 1 passed, 10 deselected in 12.08 s
+(tổng 78 test khác nhau đã kiểm tra; 6 test pump_test không chạy).
+PTY trong suite kiểm tra từng ký tự start giữa output liên tục, Backspace,
+Unicode, Ctrl+C/EOF và số dòng CSV tăng; deadline/WAIT không kéo dài theo input.
+Kiểm tra git diff --check đạt; git status ghi đúng file thay đổi và giữ nguyên
+hướng dẫn riêng chưa tracked. Đối chiếu cuối: 139/139 file data cũ không đổi.

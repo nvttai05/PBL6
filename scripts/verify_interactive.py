@@ -14,22 +14,30 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-GUARD = """import builtins, os, ctypes
+GUARD = """import builtins, os, ctypes, io
 original_import = builtins.__import__
 def guarded_import(name, *a, **kw):
-    if name.split('.')[0] in ('gpiozero', 'lgpio', 'smbus2', 'board', 'busio'):
+    if name.split('.')[0] in ('gpiozero', 'lgpio', 'smbus2', 'board', 'busio', 'RPi', 'gpiod', 'pigpio', 'periphery'):
         raise AssertionError('Hardware import forbidden: ' + name)
     return original_import(name, *a, **kw)
 builtins.__import__ = guarded_import
 original_open = os.open
 def guarded_open(path, *a, **kw):
-    if str(path).startswith(('/dev/i2c-', '/dev/gpiochip', '/dev/gpiomem')):
+    if str(path).startswith(('/dev/i2c-', '/dev/gpiochip', '/dev/gpiomem', '/dev/mem', '/sys/class/gpio')):
         raise AssertionError('Hardware device forbidden: ' + str(path))
     return original_open(path, *a, **kw)
 os.open = guarded_open
+def protect_open(original):
+    def guarded(path, *a, **kw):
+        if str(path).startswith(('/dev/i2c-', '/dev/gpiochip', '/dev/gpiomem', '/dev/mem', '/sys/class/gpio')):
+            raise AssertionError('Hardware device forbidden: ' + str(path))
+        return original(path, *a, **kw)
+    return guarded
+builtins.open = protect_open(builtins.open)
+io.open = protect_open(io.open)
 original_cdll = ctypes.CDLL
 def guarded_cdll(name, *a, **kw):
-    if name is not None and 'robonose_bme' in str(name):
+    if name is not None and any(word in str(name).lower() for word in ('robonose_bme', 'gpio')):
         raise AssertionError('Bosch hardware library forbidden')
     return original_cdll(name, *a, **kw)
 ctypes.CDLL = guarded_cdll
@@ -50,7 +58,7 @@ def main():
     report = {"hardware_guard": True, "auto_mode": False, "stdin_kept_open": True, "growth": []}
     with console.open("x", encoding="utf-8") as capture:
         proc = subprocess.Popen([sys.executable, "-c", GUARD, "collect", "--sim", "--pump-disabled",
-            "--sample-hz", "20", "--baseline", ".8", "--exposure", ".8", "--recovery", ".8",
+            "--external-pump-state", "not-used", "--sample-hz", "20", "--baseline", ".8", "--exposure", ".8", "--recovery", ".8",
             "--sim-fail-every", "7", "--display-interval", ".2", "--output", str(ROOT / "data")],
             cwd=ROOT, stdin=subprocess.PIPE, stdout=capture, stderr=subprocess.STDOUT)
         def text():
@@ -93,10 +101,12 @@ def main():
             pause("WAIT_EXPOSURE", run_path)  # partial UTF-8 and no newline
             proc.stdin.write(marker[split:]+b"\n")
             proc.stdin.flush()
-            send("pump on")
+            send("external-pump on bật nguồn ngoài mô phỏng")
+            send("mark đổi ống, mở nắp")
             send("expose")
             wait("Pha WAIT_RECOVERY")
             pause("WAIT_RECOVERY", run_path)
+            send("external-pump off tắt nguồn ngoài mô phỏng")
             send("recover")
             wait("Pha WAIT_FINISH")
             pause("WAIT_FINISH", run_path)
@@ -122,7 +132,15 @@ def main():
             assert any(e["event"] == "marker" and json.loads(e["details_json"]).get("text") == "áo thử, đang chờ nhập lệnh" for e in events)
             assert all(r["pump_command"] == "DISABLED" for r in raw)
             assert any(r["bme_status"] == "ERROR" and r["gas_resistance_ohm"] == "" for r in raw)
-            assert "Điều khiển bơm disabled" in text()
+            assert "GPIO pump command=DISABLED (không nói trạng thái bơm ngoài)" in text()
+            assert any(r["external_pump_state"]=="on" for r in raw)
+            assert any(r["external_pump_state"]=="off" for r in raw)
+            assert all(r["external_pump_source"]=="user_reported" for r in raw)
+            assert meta["external_pump"]["initial_state"]=="not-used"
+            assert meta["external_pump"]["latest_state"]=="off"
+            reports = [json.loads(e["details_json"]) for e in events if e["event"]=="external_pump_report"]
+            assert [e["state"] for e in reports]==["on","off"]
+            assert all(e["physical_feedback"] is None and not e["gpio_command_sent"] for e in reports)
             assert all((final_path / f).stat().st_size > 0 for f in
                        ("raw.csv", "events.csv", "metadata.json", "summary.json", "signals.png", "normalized.png"))
             source_names = ("raw.csv", "events.csv", "metadata.json")

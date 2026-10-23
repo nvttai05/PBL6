@@ -13,6 +13,7 @@ def parser():
     sub = p.add_subparsers(dest="command", required=True)
     doctor = sub.add_parser("doctor", help="Kiểm tra môi trường/cấu hình, không mở GPIO/I2C")
     doctor.add_argument("--config")
+    doctor.add_argument("--pump-disabled", action="store_true", help="Kiểm tra cấu hình cảm biến, bỏ enable GPIO bơm")
     analysis = sub.add_parser("analyze", help="Phân tích lại offline; không sửa raw")
     analysis.add_argument("run_directory")
     pump_test = sub.add_parser("pump-test", help="OFF → ON ngắn → OFF; không mở cảm biến; sim mặc định")
@@ -34,6 +35,8 @@ def parser():
         pump = s.add_mutually_exclusive_group()
         pump.add_argument("--pump-disabled", action="store_true", help="Ghi đè config: không khởi tạo GPIO bơm")
         pump.add_argument("--enable-pump", action="store_true", help="Cần đầy đủ cấu hình đã xác nhận")
+        s.add_argument("--external-pump-state", choices=("unknown","not-used","off","on"), default="unknown",
+                       help="Khai báo thủ công bơm ngoài, không GPIO/không phản hồi đo được")
         s.add_argument("--output", default="data", help="Root output; luôn thêm simulation/exploration/ngày")
         s.add_argument("--sample-hz", type=float)
         s.add_argument("--baseline", type=float)
@@ -69,8 +72,11 @@ def main(argv=None):
             result = analyze(args.run_directory)
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
-        cfg = load(args.config, check=args.command == "doctor")
+        cfg = load(args.config, check=False)
         if args.command == "doctor":
+            if args.pump_disabled:
+                cfg["pump"]["enabled"] = False
+            validate(cfg)
             return doctor(cfg)
         if args.command == "pump-test":
             positive(args.seconds, "seconds")

@@ -113,11 +113,30 @@ class RunWriter:
         self.meta.update(status=status, ended_at=ended_at or iso_now(), elapsed_s=now - self.start, rows=self.seq, end_reason=reason)
         self.meta["durations"] = {p: {"planned_s": state.durations[p] + (sum(x["duration_s"] for x in state.extensions) if p == "RECOVERY" else 0),
             "actual_s": sum(i["actual_s"] for i in intervals if i["phase"] == p)} for p in state.durations}
-        self.sync(force=True)
-        self.raw_file.close()
-        self.event_file.close()
-        self.closed = True
-        sync_directory(self.path)
+        errors = []
+        try:
+            self.sync(force=True)
+        except Exception as exc:
+            errors.append(f"sync: {exc}")
+        # Attempt both closures even if sync or the first close fails.
+        for label, handle in (("raw", self.raw_file), ("events", self.event_file)):
+            try:
+                handle.close()
+            except Exception as exc:
+                errors.append(f"{label} close: {exc}")
+        self.closed = self.raw_file.closed and self.event_file.closed
+        try:
+            sync_directory(self.path)
+        except Exception as exc:
+            errors.append(f"directory sync: {exc}")
+        if errors:
+            self.meta["status"] = "ERROR"
+            self.meta["end_reason"] = (reason or "") + "; đóng lượt: " + "; ".join(errors)
+            try:
+                atomic_json(self.path / "metadata.json", self.meta)
+            except Exception as exc:
+                errors.append(f"metadata: {exc}")
+            raise RuntimeError("Đóng lượt lỗi; giữ dữ liệu ở " + str(self.path) + ": " + "; ".join(errors))
 
     def finalize_name(self, name="", notes=""):
         self.meta["original_name"] = name

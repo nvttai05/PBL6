@@ -144,3 +144,28 @@ Events baseline_quality_at_start lưu snapshot và command_received giữ raw l�
 Pump ON/OFF/UNKNOWN/DISABLED chỉ là lệnh, không phải trạng thái vật lý đo được.
 pump-test có kind=pump_test, raw chỉ chứa thời gian/phase/lệnh bơm, các giá trị
 cảm biến null, events + metadata + summary audit; không có PNG cảm biến.
+
+
+## Bơm ngoài thủ công (giai đoạn thăm dò)
+
+Hai cột mới được thêm mà không đổi các giá trị cảm biến:
+- external_pump_state: unknown (mặc định), not-used, off hoặc on; chỉ là khai báo.
+- external_pump_source: not_reported hoặc user_reported. Không phải sensor feedback.
+
+pump_command=DISABLED vẫn chỉ là GPIO control disabled; không suy ra bơm ngoài OFF.
+CLI --external-pump-state đặt trạng thái đầu; lệnh external-pump <state> [ghi chú]
+tạo external_pump_report với source=user_reported, physical_feedback=null,
+gpio_command_sent=false. Raw chụp state/source ở đầu vòng acquisition nên mẫu đang
+đọc dở không bị đổi nhãn theo một lệnh tới sau. Metadata.external_pump chứa
+initial_state/latest_state/source/meaning; summary sao chép khai báo, không suy ra
+lưu lượng hay đáp ứng mùi. Trạng thái khai báo giữ giữa các lượt và sau abort/finish;
+chương trình không tắt nguồn bơm ngoài.
+
+mark lưu đúng văn bản, không tự diễn giải ON/OFF từ câu ghi chú. Mốc sự kiện là
+lúc ứng dụng nhận lệnh hoàn chỉnh/Enter, ISO Asia/Ho_Chi_Minh và elapsed_s monotonic
+cùng cơ sở với raw. Đặt notes sau thu không tạo lại timestamp của thao tác vật lý.
+
+Đọc dữ liệu cũ thiếu hai cột vẫn được; summary ghi not_recorded/null feedback.
+Lỗi sync/đóng lượt được báo ERROR/lý do; chương trình cố đóng cả raw/events và
+giữ metadata cùng dữ liệu đã ghi. Không bảo đảm ghi metadata nếu đĩa đã hỏng/đầy
+hoặc process bị kill cưỡng bức.

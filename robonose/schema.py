@@ -11,7 +11,7 @@ BME_VALUES = ["temperature_c", "humidity_pct", "pressure_hpa", "gas_resistance_o
               "bme_meas_index", "bme_gas_index", "bme_res_heat", "bme_idac", "bme_gas_wait"]
 FIELDS = ["run_id", "seq", "timestamp", "elapsed_s", "phase_elapsed_s", "phase",
           "sensor_uptime_s", "loop_interval_s", "loop_duration_s", "schedule_lag_s",
-          "pump_command"] + BME_VALUES
+          "pump_command", "external_pump_state", "external_pump_source"] + BME_VALUES
 for device in ("bme", "mq135", "mq3"):
     FIELDS += [device + s for s in ("_read_started_at", "_read_elapsed_s", "_read_duration_s", "_status", "_error", "_fresh")]
     if device != "bme":

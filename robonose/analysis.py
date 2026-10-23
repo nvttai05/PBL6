@@ -79,7 +79,8 @@ def analyze(path):
     summary = {"schema_version": "1.0", "run_id": meta["run_id"], "status": meta["status"], "rows": len(rows),
         "filter_rule": "status OK + fresh; BME gas additionally gas_valid + heater_stable + new_data",
         "auc_rule": "signed trapezoids over adjacent valid samples, no bridge across invalid rows or gap > max_gap_s",
-        "signals": {}, "environment_baseline": {}, "warnings": warnings}
+        "signals": {}, "environment_baseline": {}, "warnings": warnings,
+        "external_pump": meta.get("external_pump", {"source":"not_recorded","physical_feedback":None})}
     quality = baseline_quality([r for r in rows if r["phase"]=="BASELINE"],
                                meta["config"].get("stability"), "BASELINE" in completed and meta.get("kind")=="collect")
     summary["measurement_quality"] = {
@@ -210,7 +211,7 @@ def decorate(ax, meta, events, colors):
         ax.axvspan(i["start_s"], i["end_s"], color=colors.get(i["phase"], "#eeeeee"), alpha=.25)
         ax.text((i["start_s"] + i["end_s"]) / 2, .97, i["phase"], transform=ax.get_xaxis_transform(), fontsize=6, rotation=45, va="top")
     for event in events:
-        if event["event"] in ("marker", "pump_command", "read_error"):
+        if event["event"] in ("marker", "external_pump_report", "pump_command", "read_error"):
             t = number(event["elapsed_s"])
             if t is not None:
                 ax.axvline(t, color="gray", linestyle=":", alpha=.4)

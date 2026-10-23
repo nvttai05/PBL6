@@ -9,6 +9,12 @@ tiếp xúc/hồi phục. Chưa có van ba chiều/lọc than; chương trình k
 và thiết bị giả. Biên dịch driver không chạy phần cứng. `--hardware` mở I2C và
 khởi tạo heater; các lệnh hardware bên dưới dành cho bạn tự chạy sau khi xác nhận dây.
 
+Hướng dẫn hiện hành cho giai đoạn thăm dò:
+[docs/huong_dan_thu_mau.md](docs/huong_dan_thu_mau.md).
+Luôn dùng --pump-disabled; nếu có bơm ngoài, bạn bật/tắt bằng nguồn riêng.
+Phần mềm không biết bơm ngoài đang ON/OFF nếu chưa khai báo.
+Không chạy pump-test hoặc --enable-pump trong giai đoạn này.
+
 ## Môi trường và cài đặt
 
 Đã triển khai trên Raspberry Pi 4 Model B Rev 1.4, Debian 12, ARM64, Python 3.11.2.
@@ -18,7 +24,7 @@ Chạy lệnh từ root repo; không cần activate khi dùng đường dẫn `.
 ```bash
 cd /home/pi/robonosev1.0
 .venv/bin/python -m robonose doctor --config config.example.toml
-.venv/bin/python -m pytest -q
+.venv/bin/python -m pytest -q -k 'not pump_test'
 ```
 
 Nếu dựng môi trường mới:
@@ -94,7 +100,8 @@ kể cả khi giao diện in thông báo trễ. Thời điểm đưa/bỏ mẫu 
 | `info sample_description ...` | Mô tả mẫu tự do |
 | `info source/person_code/purge_method/lid_state/distance_cm ...` | Dùng **một tên trường** mỗi lệnh, ví dụ `info source áo` |
 | `durations 30 60 60` | Đổi thời lượng trước baseline hoặc giữa lượt |
-| `pump on`, `pump off` | Chỉ dùng khi hardware và bơm đã enable đầy đủ |
+| `external-pump on/off/not-used/unknown [ghi chú]` | Ghi nhận thao tác bơm ngoài; không gửi GPIO, không phải phép đo |
+| `mark văn bản` | Ghi thao tác ống/nắp/mẫu/bơm ngoài tại lúc nhận Enter |
 | `abort` | Kết thúc sớm, giữ dữ liệu và trạng thái ABORTED |
 | `finish` | COMPLETE chỉ ở WAIT_FINISH; dùng sớm sẽ ABORTED |
 | `quit`, Ctrl+C, SIGTERM, EOF stdin | Thoát có xử lý; lượt đang thu ABORTED |
@@ -151,39 +158,17 @@ Thu thật 30–60–60, thao tác terminal giống mô phỏng:
   --purge-method "cách xả buồng" --lid-state "trạng thái nắp"
 ```
 
-JZ-MOS: TRIG/PWM nối BCM17 (chân vật lý 11); GND điều khiển nối GND Pi,
-nguồn bơm 12 V riêng. v1.0 chỉ bật/tắt, không PWM. Cực tính TRIG chưa được xác nhận:
-template giữ enabled=false, confirmed=false và không có active_high.
-Bơm mặc định OFF khi được enable, OFF khi kết thúc lượt/abort/thoát có xử lý.
-Sim và --pump-disabled không mở GPIO. pump_command là lệnh đã gửi, trạng thái vật lý
-và lưu lượng **chưa đo được**. Code không bảo đảm OFF khi Pi chưa khởi động,
-mất điện hoặc bị kill cưỡng bức; phải kiểm tra chân/module trên hardware.
+Trong giai đoạn hiện tại không điều khiển bơm bằng Pi. --pump-disabled bỏ enable
+trong config và không import/khởi tạo/đọc/ghi GPIO, kể cả cleanup. Sim cũng không GPIO.
+Màn hình phân biệt "GPIO pump command=DISABLED" với trạng thái bơm ngoài do người
+dùng khai báo. DISABLED không có nghĩa bơm ngoài OFF. Abort/kết thúc không tắt nguồn
+bơm ngoài; bạn tự thao tác và ghi mark hoặc external-pump.
 
-Tạo cấu hình riêng, không ghi đè file có sẵn, rồi khai báo cực tính sau khi đã xác nhận:
-
-```bash
-cp --no-clobber config.example.toml config.jz-mos.toml
-nano config.jz-mos.toml
-```
-
-Trong [pump], giữ gpio_bcm=17; đặt confirmed=true và thêm active_high=true nếu đã
-xác nhận HIGH bật, hoặc active_high=false nếu LOW bật. Giữ enabled=false để chỉ
-bật điều khiển qua --enable-pump. Nếu chưa xác nhận, giữ disabled và không chạy thử thật.
-
-Lệnh thử ngắn độc lập, không mở cảm biến:
-
-```bash
-.venv/bin/python -m robonose pump-test --sim --seconds 2
-# Bạn tự chạy sau kiểm tra nguồn/dây/cực tính:
-.venv/bin/python -m robonose pump-test --hardware --enable-pump \
-  --config config.jz-mos.toml --seconds 2
-```
-
-pump-test gửi OFF → ON 2 giây theo monotonic → OFF, cuối cùng cleanup OFF.
-Có giới hạn thử <=10 giây. Sim chỉ diễn tập trình tự, mọi pump_command=DISABLED.
-Log riêng kind=pump_test chứa raw/events/metadata/summary; không có phép đo
-cảm biến và không có đồ thị cảm biến. Lệnh thu có --enable-pump cho phép pump on/off
-thủ công trong terminal, giữ reader và ghi lệnh bơm trong CSV/events.
+CLI có --external-pump-state unknown/not-used/off/on cho trạng thái ban đầu:
+unknown mặc định, not-used cho lượt không bơm. Khi đang thu:
+external-pump on bật nguồn riêng hoặc external-pump off tắt nguồn riêng.
+Raw/events/meta/summary ghi đây là user_reported, physical_feedback=null.
+Không phân tích câu mark tự do để tự đoán trạng thái bơm.
 
 Cần xác nhận điện áp cấp MQ/ADS, AO lớn nhất và chia áp ở A0/A1.
 Gain đo không thay thế giới hạn điện áp chân ADC. Khi chưa có hệ số chia áp,
@@ -237,7 +222,7 @@ Session/monitor chỉ có đồ thị liên tục; thống kê đáp ứng nền
 tránh gộp baseline nhiều lượt thành một nền.
 
 Raw/events fsync định kỳ (mặc định 5 s), đồng bộ khi đóng; metadata ghi atomic.
-Ctrl+C/SIGTERM/exception cố gắng OFF bơm, giữ raw và đánh dấu trạng thái.
+Ctrl+C/SIGTERM/exception giữ raw và đánh dấu trạng thái. Với pump-disabled, cleanup không truy cập GPIO; không tắt nguồn bơm ngoài.
 Hủy nhập tên sau COMPLETE không đổi lượt thành lỗi. Không bảo đảm mọi dữ liệu
 khi mất điện, SIGKILL, filesystem lỗi hoặc bơm không nhận lệnh OFF.
 
@@ -283,29 +268,27 @@ Trong lượt hoàn thiện này chỉ test sim/mock; đã đọc lượt hardwa
 Không tự commit/push. `.gitignore` loại `.venv`, `data`, `logs`, cache,
 binary build và secrets `.env`; sao lưu dữ liệu thu bằng cách riêng.
 
-## Checklist một lượt thử tích hợp
+## Checklist thăm dò với bơm ngoài
 
-1. Chạy doctor và monitor hardware với pump-disabled. Đối chiếu gas/T/H,
-   cờ chất lượng, điện áp ADS và xu hướng; ghi mark cho trạng thái nắp/nguồn bơm.
-   Nếu gas tiếp tục tăng hoặc T cao, ghi nhận chất lượng và khảo sát warmup/vị trí
-   cảm biến, không gọi đó là phản ứng mùi. Xác nhận nguồn MQ, ADS và chia áp thực tế.
-2. Xác nhận cực tính JZ-MOS, chân BCM17/physical11, GND và nguồn 12 V riêng.
-   Bạn tự cấp nguồn, kiểm tra OFF trước ứng dụng/khởi động Pi; chạy pump-test thật
-   OFF → ON 2 s → OFF. Đối chiếu bơm thực tế với events; chưa đạt thì không thu với bơm.
-3. Thu 30–60–60. Chọn thu bằng ống hoặc mở nắp, khai báo sampling_method/purge_method
-   và lid_state, đánh dấu thao tác thực tế bằng mark. Phân biệt MONITOR/warmup với
-   BASELINE, dùng expose/recover đúng lúc đưa/bỏ mẫu. Chỉ dùng pump on/off khi
-   đã enable rõ ràng; chương trình không tự chuyển đường khí.
-4. Sau RECOVERY chọn finish hoặc extend; đặt tên/ghi chú hoặc skip. Kiểm tra đủ file,
-   COMPLETE chỉ là hoàn thành pipeline, không xác nhận baseline ổn định hay buồng sạch.
-   analyze lại offline và xem measurement_quality/raw/% thay đổi. next cho lượt kế tiếp.
+1. Doctor chỉ kiểm tra môi trường/cấu hình; monitor hardware với pump-disabled
+   để tự xác nhận BME/ADS, flags, điện áp và xu hướng gas/T/H.
+2. Thu đối chứng 30–60–60 không dùng bơm: khai báo external-pump-state not-used,
+   không đưa mẫu; vẫn đánh dấu các mốc expose/recover cho các đoạn thời gian.
+3. Thu qua ống hoặc mở nắp theo cách bạn chọn. Bơm ngoài bật/tắt thủ công nếu có;
+   ghi sự kiện ngay lúc thao tác, không có lịch bơm do phần mềm áp đặt.
+4. Finish/extend rồi đặt tên/notes; kiểm tra COMPLETE/ABORTED/ERROR và chất lượng
+   riêng. Xem hướng dẫn chi tiết và ví dụ tên không nhận dạng cá nhân ở
+   [docs/huong_dan_thu_mau.md](docs/huong_dan_thu_mau.md).
 
 ```bash
-.venv/bin/python -m robonose collect --hardware --enable-pump \
-  --config config.jz-mos.toml --baseline 30 --exposure 60 --recovery 60 \
-  --sample-description "mẫu tự chọn" --sampling-method "bằng ống hoặc mở nắp" \
-  --purge-method "cách xả thực tế" --lid-state "trạng thái nắp"
+.venv/bin/python -m robonose doctor --pump-disabled --config config.example.toml
+.venv/bin/python -m robonose monitor --hardware --pump-disabled --config config.example.toml
+.venv/bin/python -m robonose collect --hardware --pump-disabled \
+  --config config.example.toml --baseline 30 --exposure 60 --recovery 60 \
+  --external-pump-state not-used --sample-description "đối chứng không mẫu, không bơm" \
+  --sampling-method "không đưa mẫu" --purge-method "không thay đổi điều kiện" --lid-state "đóng"
 .venv/bin/python -m robonose analyze "data/exploration/YYYY-MM-DD/THU_MUC_LUOT"
 ```
 
-Nếu chưa xác nhận bơm, thay --enable-pump bằng --pump-disabled; vẫn thu bằng thao tác tay.
+Để kiểm thử phạm vi hiện tại mà không chạy pump-test:
+.venv/bin/python -m pytest -q -k 'not pump_test'.

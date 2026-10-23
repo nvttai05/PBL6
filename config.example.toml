@@ -25,6 +25,7 @@ mq3_divider_description = "Chưa xác nhận; dự kiến 10 kΩ/10 kΩ"
 # mq135_divider_factor = 2.0
 # mq3_divider_factor = 2.0
 
+# Giai đoạn thăm dò: dùng --pump-disabled, bơm ngoài cấp nguồn thủ công.
 [pump]
 enabled = false
 confirmed = false
