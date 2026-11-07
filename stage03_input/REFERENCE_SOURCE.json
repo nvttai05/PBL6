@@ -1,0 +1,15 @@
+{
+  "source_name": "RoboNose_ControlTest_v2_1.zip",
+  "source_library_file_id": "libfile_877a05373b6c8191a34be31a4e8e762b",
+  "source_library_version": "2",
+  "source_archive_sha256": "3cff0acb57a885a234827eb255c915758926fe84e32401cc95760da92b82f645",
+  "source_files": 44,
+  "source_manifest_entries_verified": 43,
+  "bosch_files_verified": 4,
+  "firmware_version_reference": "2.1.0",
+  "reference_tgs_channel": "A2",
+  "dataset_target_tgs_channel": "A0",
+  "purpose": "historical_control_test_reference_for_stage03_implementation",
+  "new_dataset_firmware_included": false,
+  "new_build_or_hardware_test_performed_by_packaging": false
+}

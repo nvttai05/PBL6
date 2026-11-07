@@ -1,0 +1,26 @@
+{
+  "repository": "https://github.com/boschsensortec/BME68x_SensorAPI",
+  "commit": "80ea120a8b8ac987d7d79eb68a9ed796736be845",
+  "files": [
+    {
+      "file": "bme68x.c",
+      "sha256": "bad525ea57fe57a5d7dda19d287781bcbab50fdbf2dedea737c16b206cbe0157",
+      "bytes": 61867
+    },
+    {
+      "file": "bme68x.h",
+      "sha256": "09ed6babf92955ced360790958e2e2f03efb85bc4f0a8a864a4151a905eaf0ca",
+      "bytes": 10721
+    },
+    {
+      "file": "bme68x_defs.h",
+      "sha256": "5f59c0bafbcc416c091a1a1cc40bb7362f0b48ea02ac7fa5197813f491de01aa",
+      "bytes": 28498
+    },
+    {
+      "file": "LICENSE_BOSCH.txt",
+      "sha256": "56df116398e0b72a12ae353d93002d29175583590283ced2c2510e3d8075546f",
+      "bytes": 1524
+    }
+  ]
+}

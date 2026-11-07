@@ -1,0 +1,12 @@
+{
+  "AGENTS.md": "a54e48613fd5ed2498620d4bb3e31cd268edeb8b0382e275c1ca3e9872b0a4d5",
+  "README_START_HERE.md": "fea8e5791c157e33495ab41e4b2e67b436beeaf64c803e58addd86b4788e1013",
+  "configs/paths.local.example.json": "d85068e63eea9209a9e8a9bf4aa17bf441f4d7a1d4c00588caa751ff0f11e582",
+  "configs/project_target.json": "0f468d6529e94a1458d31580abb62d31fe5888d7c1f0d48f8a6b7bef10b4cf13",
+  "docs/BAN_GIAO_ROBONOSE_ESP32S3.md": "068fb3f01259597e9ff66b330c804e286e0ea918db1a8324c8656bf82564f99b",
+  "docs/KE_HOACH_ROBONOSE_DATASET_ESP32S3.md": "b39e1f591ea9033199ce59219b805cd9ce06fe5d005acd8af4f033cd0a2678f7",
+  "legacy/README.md": "63f9b07d4a17286fc4ece2ab3a8c5bf5c9b951214d6f0d360825a27c7ea288f4",
+  "prompts/01_KIEM_KE_VA_MOI_TRUONG.txt": "eedd93d58498d427e1bd73568c8fac66882995570f84b738ffa5a0fc0f442dbd",
+  "requirements.in": "1aa45afb4ea3a45d573211bd63953afbf99b485112255a4d0e6b68566cc1a5ba",
+  "runtime/README.md": "e50f953fb10c7671a90bdc1d6ac47ca31f9b1f49e1bf9faeab8de04f31597eae"
+}

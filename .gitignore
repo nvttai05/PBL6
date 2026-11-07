@@ -1,0 +1,63 @@
+# Python environments, caches and generated packages
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Test coverage and notebook checkpoints
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.ipynb_checkpoints/
+
+# Collected/demo datasets and archives; keep the layout documentation
+/data/*
+!/data/README.md
+
+# Local runtime output, logs and toolchain artifacts; keep Markdown reports
+/runtime/*
+!/runtime/*.md
+
+# Machine-specific paths and environment secrets; keep example configs
+/configs/*.local.json
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Arduino / ESP32 / PlatformIO compiled output (including nested sketch builds)
+.pio/
+.pioenvs/
+.piolibdeps/
+cmake-build-*/
+*.o
+*.obj
+*.a
+*.elf
+*.bin
+*.hex
+*.map
+*.d
+
+# Editor and operating-system files; keep shared extension recommendations
+/.vscode/*
+!/.vscode/extensions.json
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files and logs
+*.log
+*.tmp
+*.bak
+*~

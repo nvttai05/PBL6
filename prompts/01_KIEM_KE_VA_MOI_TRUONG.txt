@@ -1,0 +1,19 @@
+Tôi đã duyệt kế hoạch RoboNose Dataset ESP32-S3. Hãy thực hiện bước kiểm kê và cài môi trường trên máy Windows hiện tại, làm trong workspace này.
+
+1. Đọc AGENTS.md, configs/project_target.json, docs/KE_HOACH_ROBONOSE_DATASET_ESP32S3.md và docs/BAN_GIAO_ROBONOSE_ESP32S3.md. Quy trình mới nhất là terminal có WAIT giữa các pha, bơm tự chạy PWM 80% lúc mở app thu hardware, TGS2602 thay MQ135 #1 tại A0. Không tự đổi sang chu trình tự động chạy liền các pha.
+
+2. Kiểm kê source tham chiếu trong legacy/pi, legacy/s3 hoặc đường dẫn tôi cung cấp. Nếu có configs/paths.local.json thì đọc và tái sử dụng sau khi kiểm còn đúng. Chỉ đọc source cũ; không chạy entry point cũ vì có thể tác động tải. Ghi inventory nguồn/config/tests, version/git diff nếu có và không làm lộ secrets. Không quét toàn bộ ổ đĩa để tìm dự án. Nếu thiếu source Pi/S3 thì ghi NEEDS_INPUT và tiếp tục phần môi trường độc lập.
+
+3. Kiểm Python launcher và các bản Python đang có, chọn Python 3.11 x64. Đọc thông tin Arduino IDE/Arduino CLI/core ESP32 hiện có bằng thao tác chỉ đọc. Có thể liệt kê COM bằng pyserial list_ports sau khi cài; không mở COM. Không đoán model board/flash/PSRAM/USB. Không cài/đổi Arduino core lúc này khi chưa biết cấu hình đang nạp thành công.
+
+4. Tạo .venv của dự án bằng Python 3.11 x64 nếu chưa có. Nếu .venv có sẵn thì kiểm Python/architecture trước, không xóa/ghi đè môi trường khác. Dùng đúng .venv\Scripts\python.exe cho các lệnh cài và kiểm tra sau đó. Cài dependency trong requirements.in; ghi log và requirements-lock.txt từ môi trường đã cài. Không cài package vào Python global. Nếu chưa có Python phù hợp hoặc tải dependency lỗi, ghi kết quả thực và hướng dẫn xử lý cụ thể; không giả là đã cài được.
+
+5. Kiểm import và phiên bản PySide6, pyqtgraph, serial, numpy, matplotlib, pytest. Tạo/chạy GUI smoke nhỏ (một Qt window/plot có dữ liệu giả rõ nhãn), kiểm event loop và đóng thoát bình thường. Tự kiểm tự động bằng offscreen được, nhưng phải ghi đúng đó là offscreen và phần cửa sổ thật Windows nào chưa kiểm. Đưa một lệnh để tôi mở smoke window thật. Không cần viết cả dashboard/firmware trong bước này.
+
+6. Tạo configs/paths.local.json theo mẫu, dùng đường dẫn tuyệt đối đã xác minh; ghi python_exe đúng interpreter trong .venv, python_base_exe nếu cần và công cụ tìm thấy. Trường board/source chưa biết để null + lý do trong báo cáo. Không tự bịa đường dẫn/source/git commit.
+
+7. Xuất runtime/environment_report.json, runtime/source_inventory.json, runtime/gui_smoke_report.json và runtime/SETUP_REPORT.md. Báo cáo nêu: đã thực hiện gì, lệnh nào chạy thành công/thất bại, Python được chọn, dependency, source có/thiếu, công cụ Arduino hiện có, smoke GUI và đúng các mục còn cần người dùng cung cấp. Nếu thiếu source thì tiếp tục phần còn làm được, không dừng toàn bộ việc cài môi trường để hỏi lại.
+
+Trong bước này không mở Serial, không flash, không bật bơm/van và không chạy hệ thu cũ. Chỉ giai đoạn chuẩn bị; hành vi tự bật 80% sẽ có trong chương trình thu hardware ở bước sau. Không dùng .bat, không đổi ExecutionPolicy, không thay Python default hệ thống.
+
+Kết thúc bằng hướng dẫn ngắn để tôi mở GUI smoke và vị trí runtime/SETUP_REPORT.md. Dừng ở mốc hoàn thành bước chuẩn bị để tôi xem báo cáo trước khi viết schema/state machine/logger ở bước tiếp theo. Không gắn nhãn hardware/build passed khi chưa thực hiện.

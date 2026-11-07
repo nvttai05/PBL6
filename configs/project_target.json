@@ -1,0 +1,88 @@
+{
+  "artifact_kind": "approved_target_specification",
+  "is_runtime_config": false,
+  "config_version": 1,
+  "project": "PBL6_RoboNose_Dataset_S3",
+  "current_stage": "firmware_usb_serial_device",
+  "collection_architecture": "esp32s3_usb_to_windows_laptop",
+  "interface": "terminal_commands_and_live_dashboard",
+  "sampling_hz": 1,
+  "storage": {
+    "primary": "laptop",
+    "continuous_session_raw": true,
+    "trial_uuid_immutable": true,
+    "preserve_raw_during_wait_and_naming": true
+  },
+  "pump": {
+    "gpio": 5,
+    "active_high_requested": true,
+    "auto_start_on_hardware_program_launch_after_initialization": true,
+    "default_pwm_pct": 80,
+    "pwm_hz_initial": 1000,
+    "pwm_resolution_bits": 10,
+    "keep_running_across_trials": true,
+    "off_on_quit_or_session_fault": true,
+    "auto_restart_after_reconnect_fault": false,
+    "demo_actuates_hardware": false
+  },
+  "valve": {
+    "gpio": 4,
+    "active_high_requested": true,
+    "off_path": "FILTERED_AIR",
+    "on_path": "SAMPLE",
+    "mapping_source": "user_confirmed_plumbing"
+  },
+  "sensors": {
+    "ads1115": {
+      "i2c_address": 72,
+      "sda_gpio": 10,
+      "scl_gpio": 11,
+      "bus_hz": 100000,
+      "through_bss138": true,
+      "vdd_v_requested": 5,
+      "fsr_v": 6.144,
+      "lsb_v": 0.0001875,
+      "data_rate_sps": 128,
+      "mode": "single_shot_single_ended",
+      "divider_factor": 1,
+      "channels": {
+        "A0": "tgs2602",
+        "A1": "mq3_1",
+        "A2": "mq135_2",
+        "A3": "mq3_2"
+      }
+    },
+    "bme688": {
+      "preferred_i2c_address": 119,
+      "alternate_i2c_address": 118,
+      "sda_gpio": 8,
+      "scl_gpio": 9,
+      "vdd_v_requested": 3.3,
+      "mode": "forced",
+      "bring_up_profile": {"heater_c": 300, "heater_ms": 100, "os_t": 2, "os_h": 2, "os_p": 4},
+      "pi_reference_profile": {"heater_c": 320, "heater_ms": 150, "os_t": 8, "os_h": 2, "os_p": 4},
+      "production_profile": null
+    }
+  },
+  "trial": {
+    "phase_start_mode": "manual_terminal_commands",
+    "timed_phase_end": "enter_wait_only",
+    "durations_s": {"baseline": 60, "exposure": 120, "recovery": 60},
+    "states": {
+      "MONITOR": {"air_path": "SAMPLE", "command": "start", "next": "BASELINE"},
+      "BASELINE": {"air_path": "SAMPLE", "timeout_next": "WAIT_EXPOSURE"},
+      "WAIT_EXPOSURE": {"air_path": "SAMPLE", "command": "expose", "next": "EXPOSURE"},
+      "EXPOSURE": {"air_path": "SAMPLE", "timeout_next": "WAIT_RECOVERY"},
+      "WAIT_RECOVERY": {"air_path": "SAMPLE", "command": "recover", "next": "RECOVERY"},
+      "RECOVERY": {"air_path": "FILTERED_AIR", "timeout_next": "WAIT_FINISH"},
+      "WAIT_FINISH": {"air_path": "FILTERED_AIR", "command": "finish", "next": "WAIT_NAME"},
+      "WAIT_NAME": {"air_path": "FILTERED_AIR", "name_command_example": "name Mau1", "next_command": "next", "next": "MONITOR"},
+      "BETWEEN_RUNS": {"air_path": "FILTERED_AIR", "command": "next", "next": "MONITOR"}
+    },
+    "wait_counts_toward_phase_duration": false,
+    "name_required_before_start": false,
+    "notes_required_before_next": false
+  },
+  "board_information": "unknown_until_user_or_environment_verification",
+  "hardware_validation_status": "not_executed_for_dataset_release"
+}

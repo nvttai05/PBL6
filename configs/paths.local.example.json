@@ -1,0 +1,19 @@
+{
+  "workspace_root": null,
+  "python_base_exe": null,
+  "python_exe": null,
+  "legacy_pi_source": null,
+  "legacy_s3_source": null,
+  "legacy_sample_dirs": [],
+  "arduino_cli_exe": null,
+  "arduino_ide_version": null,
+  "arduino_esp32_core_version": null,
+  "board": {
+    "model": null,
+    "fqbn": null,
+    "flash_mb": null,
+    "psram_mb": null,
+    "usb_cdc_on_boot": null,
+    "port": null
+  }
+}
